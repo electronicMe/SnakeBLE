@@ -14,10 +14,18 @@ BLEDevice   ble;
 UARTService *bleUart;
 Serial      serial(p9, p11);  // tx, rx
 
+#define BUFFER_SIZE 255
+uint8_t uartToBLEBuffer[BUFFER_SIZE];
+
+unsigned long long writeBufferPtr;
+unsigned long long readBufferPtr;
+
 
 void disconnectionCallback(Gap::Handle_t handle, Gap::DisconnectionReason_t reason);
 void onDataWritten(const GattCharacteristicWriteCBParams *params);
 void onSerialReceived();
+
+void uartToBLEBufferTicker_callback(void);
 
 
 int main(void)
@@ -72,6 +80,17 @@ int main(void)
 
 
     /*************************************************************************/
+    /* INITIALIZE UART TO BLE BUFFER TICKER                                  */
+    /*************************************************************************/
+    Ticker uartToBLEBufferTicker;
+    uartToBLEBufferTicker.attach_us(uartToBLEBufferTicker_callback, 5000);
+
+
+
+
+
+
+    /*************************************************************************/
     /* MAIN LOOP                                                             */
     /*************************************************************************/
 
@@ -102,5 +121,20 @@ void onDataWritten(const GattCharacteristicWriteCBParams *params)
 void onSerialReceived()
 {
     uint8_t c = serial.getc();
-    ble.updateCharacteristicValue(bleUart->getRXCharacteristicHandle(), &c, 1);
+    
+    uartToBLEBuffer[(writeBufferPtr++)%BUFFER_SIZE] = c;
+    //ble.updateCharacteristicValue(bleUart->getRXCharacteristicHandle(), &c, sizeof(c));
+}
+
+
+/** Periodically called to send uart to ble buffer */
+void uartToBLEBufferTicker_callback(void)
+{
+    if (writeBufferPtr > readBufferPtr)
+    {
+        uint8_t c = uartToBLEBuffer[(readBufferPtr++)%BUFFER_SIZE];
+        
+        // Send new data
+        ble.updateCharacteristicValue(bleUart->getRXCharacteristicHandle(), &c, sizeof(c));
+    }
 }
